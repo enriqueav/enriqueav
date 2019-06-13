@@ -1,0 +1,216 @@
+<!doctype html>
+<html>
+<head>
+  <meta property="og:image" content="https://raw.githubusercontent.com/enriqueav/enriqueav/master/docs/images/preview.png">
+  <meta charset="utf-8">
+  <title>enriqueav</title>
+</head>
+  <script src="./pixi.min.js"></script>
+  <script src="./sound.js"></script>
+    <style type="text/css">
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: white;
+      }
+    </style>
+<body>
+  <script type="text/javascript">
+    class BlipButton extends PIXI.Graphics {
+        constructor(x, y, size, yIndex) {
+            super();
+            this.x = x;
+            this.y = y;
+            this.size = size;
+            this.level = 0;
+            this.interactive = true;
+            this.buttonMode = true;
+            this.on('pointerdown', this.onButtonUp);
+
+            // button configs depending on level
+            this.colors = [
+                PIXI.utils.rgb2hex([1, 1, 1]),
+                PIXI.utils.rgb2hex([0.907, 0.704, 0.704]),
+                PIXI.utils.rgb2hex([0.807, 0.504, 0.504])
+            ];
+            this.blink_colors = [
+                PIXI.utils.rgb2hex([1, 1, 1]),
+                PIXI.utils.rgb2hex([0.907, 0.404, 0.404]),
+                PIXI.utils.rgb2hex([0.907, 0.304, 0.304])
+            ];
+            this.volumes = [0, 0.3, 1];
+
+            // paint the initial state
+            this.draw();
+        }
+
+        onButtonUp(){
+            this.level++;
+            this.level %= 3;
+            this.draw();
+        }
+
+        draw() {
+          this.beginFill(this.colors[this.level]);
+          this.drawRoundedRect(
+              0, 0, this.size, this.size, 3
+          );
+          this.endFill();
+        }
+
+        blink() {
+          if(this.level > 0){
+              this.beginFill(this.blink_colors[this.level]);
+              this.drawRoundedRect(
+                  0, 0, this.size, this.size, 3
+              );
+              this.endFill();
+          }
+        }
+
+        unblink() {
+          if(this.level > 0){
+            this.beginFill(this.colors[this.level]);
+            this.drawRoundedRect(
+                0, 0, this.size, this.size, 3
+            );
+            this.endFill();
+          }
+        }
+
+        shootSound(frequency, waitTime=0, volume=1) {
+            soundEffect(
+            frequency,           //frequency
+            0.00,              //attack
+            0.10,              //decay
+            "sine",       //waveform
+            volume,                //Volume
+            0,             //pan
+            waitTime,             //wait before playing
+            0,             //pitch bend amount
+            false,            //reverse bend
+            0,                //random pitch range
+            0,               //dissonance
+            undefined, //echo: [delay, feedback, filter]
+            undefined         //reverb: [duration, decay, reverse?]
+            );
+      }
+    }
+    class BlipTronic extends PIXI.Container {
+      constructor(x, y, width, heigth, border=5) {
+          super();
+          this.x = x;
+          this.y = y;
+          this.p_width = width;
+          this.p_heigth = heigth;
+          this.border = border;
+          this.bpm = 160;
+          this.fps = 3600/this.bpm;
+          this.moved = 0;
+          this.step = 0;
+          this.steps = 0;
+          this.sequended = false;
+          this.mainPanel = new PIXI.Graphics();
+          this.addChild(this.mainPanel);
+          this.buttonsByX = [];
+          this.frequencies = Array();
+          for(var i=0; i<8; i++) {
+              var frequency = 130.81 + ((261.63 - 130.81) / 8) * (8 - i);
+              this.frequencies.push(frequency)
+          }
+          this.drawMainPanel();
+          this.drawButtons();
+      }
+
+      drawMainPanel() {
+          this.mainPanel.clear();
+          this.mainPanel.beginFill(PIXI.utils.rgb2hex([0.3, 0.3, 0.3]));
+          this.mainPanel.drawRoundedRect(
+              -this.border, -this.border,
+              this.p_width+this.border*2, this.p_heigth+this.border*2,
+              24
+          );
+          this.mainPanel.endFill();
+
+          this.mainPanel.beginFill(PIXI.utils.rgb2hex([0.8, 0.8, 0.8]));
+          this.mainPanel.drawRoundedRect(
+              0, 0, this.p_width, this.p_heigth, 20
+          );
+          this.mainPanel.endFill();
+      }
+
+      drawButtons(){
+          let padding = 30;
+          let size = 32;
+          this.buttonsByX = [];
+
+          for(var c=0; c<8; c++){
+              this.buttonsByX.push(Array())
+          }
+
+          var yIndex = 0;
+          for(var y=padding; y<this.p_heigth-padding; y+=(size+26)) {
+              var col = 0;
+              for (var x = padding; x < this.p_width - padding; x += (size + 26)) {
+                  let button = new BlipButton(x, y, size, yIndex);
+                  this.addChild(button);
+                  this.buttonsByX[col++].push(button);
+              }
+              yIndex++;
+          }
+      }
+
+      loop(delta) {
+          this.moved += delta;
+          if(this.moved >= this.fps){
+              this.moved = this.moved-this.fps;
+              this.step++;
+              this.step = this.step%8;
+              let previous_step = (this.step+7)%8;
+              let next_step = (this.step+1)%8;
+
+              // schedule next sound
+              for(var yIndex=0; yIndex<8; yIndex++){
+                  this.buttonsByX[previous_step][yIndex].unblink();
+                  this.buttonsByX[this.step][yIndex].blink();
+                  let nextButton = this.buttonsByX[next_step][yIndex];
+                  if(nextButton.level > 0){
+                      nextButton.shootSound(
+                          this.frequencies[yIndex], (60/this.bpm)-(this.moved/60),
+                          nextButton.volumes[nextButton.level]
+                      );
+                  }
+              }
+          }
+      }
+    }
+
+    let type = "WebGL";
+    if(!PIXI.utils.isWebGLSupported()){
+      type = "canvas"
+    }
+
+    //Create a Pixi Application
+    let app = new PIXI.Application({width: 256, height: 256, antialias: true});
+
+    app.renderer.margin = 0;
+    app.renderer.padding = 0;
+    app.renderer.view.style.position = "absolute";
+    app.renderer.view.style.display = "block";
+    app.renderer.backgroundColor = 0xFFFFFF;
+    app.renderer.autoResize = true;
+    app.renderer.resize(window.innerWidth, window.innerHeight);
+
+    let blip = new BlipTronic(50, 50, 500, 500);
+
+    app.stage.addChild(blip);
+    document.body.appendChild(app.view);
+
+    // Listen for animate update
+    app.ticker.add((delta) => {
+      blip.loop(delta);
+    });
+
+  </script>
+</body>
+</html>
