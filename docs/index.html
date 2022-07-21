@@ -15,26 +15,25 @@
     </style>
 <body>
   <script type="text/javascript">
-
     function randomInt(max, min=0){
         return min + Math.floor(Math.random() * (max-min))
     }
 
     function randomBool(){
-        return Math.random() >= 0.5
+        return Math.random() >= 0.5;
     }
 
     class Wave extends PIXI.Container {
-      constructor(centerPoint, width, barWidth=5, barHeight=50,
-                  amplitude=100, speed=10, frequency=0.5) {
+      constructor(centerPoint, length, barWidth=10, barHeight=50,
+                  amplitude=100, speed=10, frequency=0.5, vertical=true) {
           super();
+          this.vertical = vertical;
           this.centerPoint = centerPoint;
-          this.wave_width = width;
+          this.waveLength = length;
           this.barWidth = barWidth;
           this.barHeight = barHeight;
           this.speed = speed;
           this.frequency = frequency;
-          this.rectangles = [];
           this.points = [];
           this.moved = 0;
 
@@ -50,6 +49,7 @@
           this.amplitudeJump = randomInt(6);
           this.minAmplitude = randomInt(this.amplitude/3, this.amplitude/2);
           this.maxAmplitude = randomInt(this.amplitude*2, this.amplitude*3);
+
           this.initializeBars();
       }
 
@@ -60,9 +60,6 @@
           this.addChild(r);
       }
 
-      addBar(bar){
-          this.rectangles.push(bar);
-      }
       nextColor(){
           for(var i=0; i<3; i++){
               if(this.colorDirections[i]){
@@ -101,34 +98,54 @@
           this.points = [];
           var borderPoints = [];
           var r = this.getChildAt(0);
-          var y_positions = [];
-          for(var i=-this.barWidth; i<=this.wave_width+this.barWidth; i+=this.barWidth){
-            var y_position = Math.sin(
-                ((i+this.moved)*this.frequency)*Math.PI/180
+          var curves = [];
+          console.log("width " + app.screen.width);
+          var max_i = 0
+          for(var i=-this.barWidth; i<=this.waveLength+this.barWidth; i+=this.barWidth){
+            var curve = Math.sin(
+                ((i+this.moved)*this.frequency)*(Math.PI/180)
             ) * this.amplitude;
-            y_positions.push(y_position);
-            var y = this.centerPoint - this.barHeight/2 + y_position;
-            this.points.push(i);
-            this.points.push(y);
-            borderPoints.push(i);
-            borderPoints.push(y-5);
+            curves.push(curve);
+            var position = this.centerPoint - this.barHeight/2 + curve;
+            if(this.vertical) {
+                this.points.push(position);
+                this.points.push(i);
+                borderPoints.push(position-5);
+                borderPoints.push(i);
+            } else {
+                this.points.push(i);
+                this.points.push(position);
+                borderPoints.push(i);
+                borderPoints.push(position-5);
+            }
+            max_i = i;
           }
-          for(var i=this.wave_width+this.barWidth; i>=-this.barWidth; i-=this.barWidth){
-            var y = this.centerPoint + this.barHeight/2 + y_positions.pop()
-            this.points.push(i);
-            this.points.push(y);
-            borderPoints.push(i);
-            borderPoints.push(y+5);
+          for(var i=max_i; i>=-this.barWidth; i-=this.barWidth){
+            var position = this.centerPoint + this.barHeight/2 + curves.pop();
+            if(this.vertical) {
+                this.points.push(position);
+                this.points.push(i);
+                borderPoints.push(position+5);
+                borderPoints.push(i);
+            } else {
+                this.points.push(i);
+                this.points.push(position);
+                borderPoints.push(i);
+                borderPoints.push(position+5);
+            }
           }
           r.clear();
+
           r.beginFill(PIXI.utils.rgb2hex([0, 0, 0]));
           r.drawPolygon(borderPoints);
           r.endFill();
+
           r.beginFill(PIXI.utils.rgb2hex(this.color));
           r.drawPolygon(this.points);
           r.endFill();
 
           this.moved += this.speed * delta;
+          // this.moved = this.moved % 360
           this.nextColor();
           this.nextAmplitude();
       }
@@ -151,15 +168,20 @@
     app.renderer.resize(window.innerWidth, window.innerHeight);
 
     var wavesContainer = new PIXI.Container();
-    var waves = [];
-    for(var i=0; i<6; i++){
-        waves.push(
-            new Wave(randomInt(0, app.screen.height), app.screen.width, 5, randomInt(40, 160),
-            amplitude=randomInt(20, 120), speed=randomInt(1, 12), frequency=Math.random()/3)
+    for(var i=0; i<randomInt(5, 8); i++){
+        var vertical = randomBool();
+        if(vertical){
+            var length = app.screen.height;
+            var maxPoint = app.screen.width;
+        } else {
+            var length = app.screen.width;
+            var maxPoint = app.screen.height;
+        }
+        wavesContainer.addChild(
+            new Wave(randomInt(0, maxPoint), length, 10, randomInt(40, 160),
+            randomInt(20, 120), randomInt(1, 12), Math.random()/3,
+            vertical)
         )
-    }
-    for(var i=0; i<waves.length; i++) {
-        wavesContainer.addChild(waves[i]);
     }
     app.stage.addChild(wavesContainer);
     document.body.appendChild(app.view);
