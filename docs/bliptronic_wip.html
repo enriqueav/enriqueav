@@ -1,0 +1,1047 @@
+<!doctype html>
+<html>
+<head>
+  <meta property="og:image" content="https://raw.githubusercontent.com/enriqueav/enriqueav/master/docs/images/preview.png">
+  <meta charset="utf-8">
+  <title>enriqueav</title>
+</head>
+  <script src="./pixi.min.js"></script>
+  <script src="./sound.js"></script>
+    <style type="text/css">
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: white;
+      }
+    </style>
+<body>
+  <script type="text/javascript">
+    function randomInt(max, min=0){
+        return min + Math.floor(Math.random() * (max-min))
+    }
+
+    function randomBool(){
+        return Math.random() >= 0.5;
+    }
+
+    class Wave extends PIXI.Container {
+      constructor(centerPoint, initialColor, length, barWidth=10, barHeight=50,
+                  amplitude=100, speed=10, frequency=0.5, vertical=true) {
+          super();
+          this.vertical = vertical;
+          this.centerPoint = centerPoint;
+          this.waveLength = length;
+          this.barWidth = barWidth;
+          this.barHeight = barHeight;
+          this.speed = speed;
+          this.frequency = frequency;
+          this.points = [];
+          this.moved = 0;
+
+          // COLOR arguments
+          // this.color = [Math.random(), Math.random(), Math.random()];
+          this.color = initialColor;
+          this.colorJumps = [Math.random()/256, Math.random()/256, Math.random()/256];
+          this.colorDirections = [randomBool(), randomBool(), randomBool()];
+
+          // AMPLITUDE arguments
+          this.amplitude = amplitude;
+          this.initialAmplitude = this.amplitude;
+          this.amplitudeDirection = randomBool();
+          this.amplitudeJump = randomInt(6);
+          this.minAmplitude = randomInt(this.amplitude/3, this.amplitude/2);
+          this.maxAmplitude = randomInt(this.amplitude*2, this.amplitude*3);
+
+          this.initializeBars();
+      }
+
+      initializeBars(){
+          this.moved = randomInt(180);
+          this.points = [];
+          var r = new PIXI.Graphics();
+          this.addChild(r);
+      }
+
+      nextColor(){
+          for(var i=0; i<3; i++){
+              if(this.colorDirections[i]){
+                  this.color[i] += this.colorJumps[i];
+                  if(this.color[i]>1){
+                      this.color[i] = 1;
+                      this.colorDirections[i] = !this.colorDirections[i];
+                  }
+              } else {
+                  this.color[i] -= this.colorJumps[i];
+                  if(this.color[i]<0){
+                      this.color[i] = 0;
+                      this.colorDirections[i] = !this.colorDirections[i];
+                  }
+              }
+          }
+      }
+
+      nextAmplitude(){
+          if(this.amplitudeDirection){
+              this.amplitude += this.amplitudeJump/10;
+              if(this.amplitude > this.maxAmplitude){
+                  this.amplitude = this.maxAmplitude;
+                  this.amplitudeDirection = !this.amplitudeDirection;
+              }
+          } else {
+              this.amplitude -= this.amplitudeJump/10;
+              if(this.amplitude < this.minAmplitude){
+                  this.amplitude = this.minAmplitude;
+                  this.amplitudeDirection = !this.amplitudeDirection;
+              }
+          }
+      }
+
+      move(delta) {
+          this.points = [];
+          var borderPoints = [];
+          var r = this.getChildAt(0);
+          var curves = [];
+          var max_i = 0
+          for(var i=-this.barWidth; i<=this.waveLength+this.barWidth; i+=this.barWidth){
+            var curve = Math.sin(
+                ((i+this.moved)*this.frequency)*(Math.PI/180)
+            ) * this.amplitude;
+            curves.push(curve);
+            var position = this.centerPoint - this.barHeight/2 + curve;
+            if(this.vertical) {
+                this.points.push(position);
+                this.points.push(i);
+                borderPoints.push(position-5);
+                borderPoints.push(i);
+            } else {
+                this.points.push(i);
+                this.points.push(position);
+                borderPoints.push(i);
+                borderPoints.push(position-5);
+            }
+            max_i = i;
+          }
+          for(var i=max_i; i>=-this.barWidth; i-=this.barWidth){
+            var position = this.centerPoint + this.barHeight/2 + curves.pop();
+            if(this.vertical) {
+                this.points.push(position);
+                this.points.push(i);
+                borderPoints.push(position+5);
+                borderPoints.push(i);
+            } else {
+                this.points.push(i);
+                this.points.push(position);
+                borderPoints.push(i);
+                borderPoints.push(position+5);
+            }
+          }
+          r.clear();
+
+          r.beginFill(PIXI.utils.rgb2hex([0, 0, 0]));
+          r.drawPolygon(borderPoints);
+          r.endFill();
+
+          r.beginFill(PIXI.utils.rgb2hex(this.color));
+          r.drawPolygon(this.points);
+          r.endFill();
+
+          this.moved += this.speed * delta;
+          // this.moved = this.moved % 360
+          // this.nextColor();
+          this.nextAmplitude();
+      }
+    }
+
+      var totalTime = 0;
+    class ControlButton extends PIXI.Graphics {
+        constructor(x, y, sizeX, sizeY, color, onClick, father) {
+            super();
+            this.x = x;
+            this.y = y;
+            this.sizeX = sizeX;
+            this.sizeY = sizeY;
+            this.color = color;
+            this.interactive = true;
+            this.buttonMode = true;
+            this.on('pointerdown', onClick);
+            this.father = father;
+            this.draw();
+        }
+
+        draw() {
+            this.clear();
+            this.beginFill(this.color);
+            this.drawRect(
+                0, 0, this.sizeX, this.sizeY
+            );
+            this.endFill();
+        }
+    }
+
+    class NoteButton extends PIXI.Graphics {
+        constructor(baseColor) {
+            super();
+            this.level = 0;
+            this.border = 3;
+            this.interactive = true;
+            this.buttonMode = true;
+            this.baseColor = baseColor;
+            this.on('pointerdown', this.onButtonUp);
+
+            // button configs depending on level
+            this.colors = [
+                PIXI.utils.rgb2hex(this.baseColor),
+                PIXI.utils.rgb2hex([0.907, 0.704, 0.704]),
+                PIXI.utils.rgb2hex([0.807, 0.504, 0.504])
+            ];
+            this.blink_colors = [
+                PIXI.utils.rgb2hex([1, 1, 1]),
+                PIXI.utils.rgb2hex([0.907, 0.404, 0.404]),
+                PIXI.utils.rgb2hex([0.907, 0.304, 0.304])
+            ];
+            this.volumes = [0, 0.5, 0.9];
+        }
+
+        setProperties(x, y, sizeX, sizeY) {
+            this.x = x;
+            this.y = y;
+            this.sizeX = sizeX;
+            this.sizeY = sizeY;
+        }
+
+        onButtonUp(){
+            this.level++;
+            this.level %= 3;
+            this.draw();
+        }
+
+        draw() {
+            this.clear();
+            if(this.level>0){
+              this.border = this.level * 3
+              this.beginFill([0, 0, 0]);
+              this.drawRect(
+                 -this.border, -this.border, this.sizeX+(this.border*2), this.sizeY+(this.border*2)
+              );
+            }
+            this.beginFill(this.colors[0]);
+            // this.beginFill(this.colors[this.level]);
+            this.drawRect(
+               0, 0, this.sizeX, this.sizeY
+            );
+            this.endFill();
+        }
+
+        blink() {
+          if(this.level > 0){
+            this.clear();
+            var increase = 0;
+            if(this.level>0){
+              this.border = this.level * 3;
+              increase = this.level * 4;
+              this.beginFill([0, 0, 0]);
+              this.drawRect(
+                 -this.border - increase, 
+                 -this.border - increase, 
+                 this.sizeX+(this.border*2)+(increase*2), 
+                 this.sizeY+(this.border*2)+(increase*2)
+              );
+            }
+            this.beginFill(this.colors[0]);
+            // this.beginFill(this.colors[this.level]);
+            this.drawRect(
+               -increase, 
+               -increase, 
+               this.sizeX+(increase*2), 
+               this.sizeY+(increase*2)
+            );
+            this.endFill();
+          }
+        }
+
+        unblink() {
+          if(this.level > 0){
+            this.clear();
+            if(this.level>0){
+              this.border = this.level * 3
+              this.beginFill([0, 0, 0]);
+              this.drawRect(
+                 -this.border, -this.border, this.sizeX+(this.border*2), this.sizeY+(this.border*2)
+              );
+            }
+            this.beginFill(this.colors[0]);
+            // this.beginFill(this.colors[this.level]);
+            this.drawRect(
+               0, 0, this.sizeX, this.sizeY
+            );
+            this.endFill();
+          }
+        }
+    }
+
+    class BlipTronic extends PIXI.Container {
+      constructor(x, y, width, heigth, border, xIndex, yIndex,
+                  totalXGrid, note, soundNumber,
+                  tempoUp, tempoDown, buildRight, buildDown,
+                  removeMe, toggleSize,
+                  father) {
+          super();
+          // These are PIXI.Container's x and y
+          this.x = x;
+          this.y = y;
+
+          // The location of this instance in the controller
+          this.xIndex = xIndex;
+          this.yIndex = yIndex;
+          this.totalXGrid = totalXGrid;
+
+          this.baseColor = this.createBaseColor();
+          let delta = 0.25
+          var darkerVersion = [
+            this.baseColor[0] - delta,
+            this.baseColor[1] - delta,
+            this.baseColor[2] - delta,
+          ]
+          this.baseColorHexDarker = PIXI.utils.rgb2hex(darkerVersion);
+          
+          this.contrastColor = contrastColor(this.baseColor);
+          this.contrastColorHex = PIXI.utils.rgb2hex(this.contrastColor);
+          this.contrastColorHex = '#FFFFFF';
+
+          // Initial state
+          this.steps = 8;
+          this.yLevels = 8;
+          this.totalSteps = 8;
+          this.moved = 0;
+          this.step = 0;
+
+          // Initial configuration
+          this.note = note;
+          this.soundNumber = soundNumber;
+          this.buttonsByX = [];
+          this.lSize = true;
+
+          // TODO: Callbacks, there should be a better way to handle this
+          this.father = father;
+          this.tempoUpFunction = tempoUp;
+          this.tempoDownFunction = tempoDown;
+          this.buildRightFunction = buildRight;
+          this.buildDownFunction = buildDown;
+          this.removeMeFunction = removeMe;
+          this.toggleSizeFunction = toggleSize;
+
+          // UI
+          this.borderColor = PIXI.utils.rgb2hex([0.1, 0.1, 0.1]);
+          this.buttonPanelColor = PIXI.utils.rgb2hex([0.9, 0.9, 0.9]);
+
+          this.panelWidth = width;
+          this.panelHeigth = heigth;
+          this.border = border;
+          this.mainPanel = new PIXI.Container();
+          this.controlPanel = new PIXI.Container();
+          this.controlTextStyle = new PIXI.TextStyle({
+              fontFamily: 'Arial',
+              fontSize: 32,
+              fontWeight: 'bold',
+              fill: this.contrastColorHex,
+              // stroke: '#eeeeee',
+              // strokeThickness: 2
+          });
+
+          this.noteTextStyle = new PIXI.TextStyle({
+              fontFamily: 'Arial',
+              fontSize: 11,
+              fontWeight: 'bolder',
+              fill: this.contrastColorHex,
+              // stroke: '#eeeeee',
+              // strokeThickness: 2
+          });
+
+          // Sound Configuration
+          this.cFrequencies = [
+            16.35, 32.70, 65.41, 130.81, 261.63, 523.25, 1046.50, 2093.00, 4186.01
+          ];
+          this.sounds = [
+              {attack: 0.00, decay: 0.15, waveform: "sine",
+                  delay: undefined, dissonance: 0.01},
+              {attack: 0.00, decay: 0.15, waveform: "triangle",
+                  delay: undefined, dissonance: 0.01},
+              {attack: 0.00, decay: 0.15, waveform: "square",
+                  delay: undefined, volumeDiff: -0.60, dissonance: 0.01},
+              {attack: 0.00, decay: 0.15, waveform: "sawtooth",
+                  delay: undefined, volumeDiff: -0.60, dissonance: 0.01},
+              {attack: 0.04, decay: 0.14, waveform: "sine",
+                  delay: undefined, volumeDiff: 0.15, dissonance: 0.01, pitchBend: -1/16},
+              {attack: 0.04, decay: 0.14, waveform: "triangle",
+                  delay: undefined, volumeDiff: 0.15, dissonance: 0.01, pitchBend: -1/16},
+              {attack: 0.04, decay: 0.14, waveform: "square",
+                  delay: undefined, volumeDiff: -0.65, dissonance: 0.01, pitchBend: -1/16},
+              {attack: 0.04, decay: 0.4, waveform: "sawtooth",
+                  delay: undefined, volumeDiff: -0.65, dissonance: 0.01, pitchBend: -1/16},
+          ];
+
+          // Putting all together
+          this.addChild(this.mainPanel);
+          this.addChild(this.controlPanel);
+          this.createButtons();
+          this.buildFrequencies();
+          this.draw();
+      }
+
+      createBaseColor(){
+        var c1 = 0;
+        var c2 = 0;
+        var c3 = 0;
+        while( 
+          c1 < 0.3 || c1 > 0.7 ||
+          c2 < 0.3 || c2 > 0.7 ||
+          c3 < 0.3 || c3 > 0.7 
+        ){
+          c1 = Math.random();
+          c2 = Math.random();
+          c3 = Math.random();
+        }
+        return [c1, c2, c3]
+      }
+
+      createButtons() {
+          for (var x=0; x<this.steps; x++) {
+              let buttonsInX = Array();
+              var additional = 0.05;
+              for(var y=0; y<this.yLevels; y++) {
+                  var newBase = [
+                      this.baseColor[0] + (additional*(y-4)),
+                      this.baseColor[1] + (additional*(y-4)),
+                      this.baseColor[2] + (additional*(y-4)),
+                  ]
+                  let button = new NoteButton(newBase);
+                  buttonsInX.push(button);
+              }
+              this.buttonsByX.push(buttonsInX);
+          }
+      }
+
+      draw() {
+          this.controlPanel.y = this.panelHeigth + 20;
+          this.drawMainPanel();
+          this.drawControlPanel();
+          this.drawButtons();
+      }
+
+      drawMainPanel() {
+          this.mainPanel.removeChildren();
+          let mainPanelGraphics = new PIXI.Graphics();
+          mainPanelGraphics.clear();
+          mainPanelGraphics.beginFill(this.borderColor);
+          mainPanelGraphics.drawRect(
+              0, 0,
+              this.panelWidth+this.border*2, this.panelHeigth+this.border*2,
+          );
+          mainPanelGraphics.endFill();
+
+          mainPanelGraphics.beginFill(this.buttonPanelColor);
+          mainPanelGraphics.drawRect(
+              this.border, this.border, this.panelWidth, this.panelHeigth
+          );
+          mainPanelGraphics.endFill();
+          this.mainPanel.addChild(mainPanelGraphics);
+      }
+
+      drawControlPanel() {
+          this.controlPanel.removeChildren();
+          let panelGraphics = new PIXI.Graphics();
+          panelGraphics.beginFill(this.borderColor);
+          panelGraphics.drawRect(
+              0, 0,
+              this.panelWidth+this.border*2, this.panelWidth/5+this.border*2
+          );
+          panelGraphics.endFill();
+
+          panelGraphics.beginFill(this.buttonPanelColor);
+          panelGraphics.drawRect(
+              this.border, this.border, this.panelWidth, this.panelWidth/5
+          );
+          panelGraphics.endFill();
+
+          // note number display
+          let displays = new PIXI.Graphics();
+          let displaysY = 30;
+          let displaysWidth = 30;
+          let displaysHeight = 50;
+          let displaysRadius = 4;
+          displays.beginFill(this.baseColorHexDarker);
+          displays.drawRect(
+              30, displaysY, displaysWidth, displaysHeight
+          );
+          displays.drawRect(
+              130, displaysY, displaysWidth, displaysHeight
+          );
+          displays.drawRect(
+              230, displaysY, displaysWidth*3, displaysHeight
+          );
+          displays.endFill();
+
+          // TODO: move this to a function
+          let upY = 30;
+          let downY = 60;
+          let upDownWidth = 40;
+          let udDownHeight = 20;
+          let upDownColor = this.baseColorHexDarker;
+          var noteUpControl = new ControlButton(
+              70, upY, upDownWidth, udDownHeight, upDownColor, this.noteUp, this
+          );
+          var noteDownControl = new ControlButton(
+              70, downY, upDownWidth, udDownHeight, upDownColor, this.noteDown, this
+          );
+          const noteUpText = new PIXI.Text('UP', this.noteTextStyle);
+          const noteDownText = new PIXI.Text('DOWN', this.noteTextStyle);
+          // USE these? '↑' '↓'
+          noteUpText.x = noteUpControl.x + 12;
+          noteUpText.y = noteUpControl.y + 2;
+          noteDownText.x = noteDownControl.x + 2;
+          noteDownText.y = noteDownControl.y + 2;
+
+          var soundUpControl = new ControlButton(
+              170, upY, upDownWidth, udDownHeight, upDownColor, this.soundUp, this
+          );
+          var soundDownControl = new ControlButton(
+              170, downY, upDownWidth, udDownHeight, upDownColor, this.soundDown, this
+          );
+          const soundUpText = new PIXI.Text('UP', this.noteTextStyle);
+          const soundDownText = new PIXI.Text('DOWN', this.noteTextStyle);
+          // USE these? '↑' '↓'
+          soundUpText.x = soundUpControl.x + 12;
+          soundUpText.y = soundUpControl.y + 2;
+          soundDownText.x = soundDownControl.x + 2;
+          soundDownText.y = soundDownControl.y + 2;
+
+          var tempoUpControl = new ControlButton(
+              330, upY, upDownWidth, udDownHeight, upDownColor, this.tempoUpFunction, this
+          );
+          var tempoDownControl = new ControlButton(
+              330, downY, upDownWidth, udDownHeight, upDownColor, this.tempoDownFunction, this
+          );
+          const tempoUpText = new PIXI.Text('UP', this.noteTextStyle);
+          const tempoDownText = new PIXI.Text('DOWN', this.noteTextStyle);
+          // USE these? '↑' '↓'
+          tempoUpText.x = tempoUpControl.x + 12;
+          tempoUpText.y = tempoUpControl.y + 2;
+          tempoDownText.x = tempoDownControl.x + 2;
+          tempoDownText.y = tempoDownControl.y + 2;
+
+          this.controlPanel.addChild(panelGraphics);
+          this.controlPanel.addChild(displays);
+          this.controlPanel.addChild(noteUpControl);
+          this.controlPanel.addChild(noteUpText);
+          this.controlPanel.addChild(noteDownControl);
+          this.controlPanel.addChild(noteDownText);
+          this.controlPanel.addChild(soundUpControl);
+          this.controlPanel.addChild(soundUpText);
+          this.controlPanel.addChild(soundDownControl);
+          this.controlPanel.addChild(soundDownText);
+
+          this.controlPanel.addChild(tempoUpControl);
+          this.controlPanel.addChild(tempoUpText);
+          this.controlPanel.addChild(tempoDownControl);
+          this.controlPanel.addChild(tempoDownText);
+
+          // TODO do not use father, validate if I have buildRightFunction or not
+          if(this.xIndex < this.father.xGridLimit-1) {
+              var cloneRightControl = new ControlButton(
+                  380, upY, upDownWidth * 2, udDownHeight, upDownColor, this.buildRightFunction, this
+              );
+              const cloneRightText = new PIXI.Text('Clone Right', this.noteTextStyle);
+              cloneRightText.x = cloneRightControl.x + 7;
+              cloneRightText.y = cloneRightControl.y + 2;
+              this.controlPanel.addChild(cloneRightControl);
+              this.controlPanel.addChild(cloneRightText);
+          }
+
+          // TODO do not use father, validate if I have buildDownFunction or not
+          if(this.yIndex < this.father.yGridLimit-1) {
+              var cloneDownControl = new ControlButton(
+                  380, downY, upDownWidth * 2, udDownHeight, upDownColor, this.buildDownFunction, this
+              );
+              const cloneDownText = new PIXI.Text('Clone Down', this.noteTextStyle);
+              // USE these? '↑' '↓'
+              cloneDownText.x = cloneDownControl.x + 7;
+              cloneDownText.y = cloneDownControl.y + 2;
+              this.controlPanel.addChild(cloneDownControl);
+              this.controlPanel.addChild(cloneDownText);
+          }
+
+          // TODO do not use father, validate if I have removeMeFunction or not
+          if(this.xIndex!=0 || this.yIndex!= 0) {
+              var closeControl = new ControlButton(
+                  470, upY, upDownWidth / 2, udDownHeight, upDownColor, this.removeMeFunction, this
+              );
+              const closeText = new PIXI.Text('X', this.noteTextStyle);
+              closeText.x = closeControl.x + 5;
+              closeText.y = closeControl.y + 2;
+              this.controlPanel.addChild(closeControl);
+              this.controlPanel.addChild(closeText);
+          }
+
+          var changeSizeControl = new ControlButton(
+              470, downY, upDownWidth/2, udDownHeight, upDownColor, this.toggleSizeFunction, this
+          );
+          const changeSizeText = new PIXI.Text('≡≡', this.noteTextStyle);
+          // USE these? '↑' '↓'
+          changeSizeText.x = changeSizeControl.x + 2;
+          changeSizeText.y = changeSizeControl.y + 2;
+          this.controlPanel.addChild(changeSizeControl);
+          this.controlPanel.addChild(changeSizeText);
+
+          this.drawNoteText();
+          this.drawSoundText();
+          this.drawTempoText();
+      }
+
+      drawNoteText(){
+          this.noteText = new PIXI.Text(this.note, this.controlTextStyle);
+          this.noteText.x = 35;
+          this.noteText.y = 35;
+          this.controlPanel.addChild(this.noteText);
+      }
+
+      drawSoundText(){
+          this.soundText = new PIXI.Text(this.soundNumber, this.controlTextStyle);
+          this.soundText.x = 135;
+          this.soundText.y = 35;
+          this.controlPanel.addChild(this.soundText);
+      }
+
+      drawTempoText(){
+          this.tempoText = new PIXI.Text(this.father.bpm, this.controlTextStyle);
+          this.tempoText.x = 245;
+          this.tempoText.y = 35;
+          this.controlPanel.addChild(this.tempoText);
+      }
+
+      drawButtons(){
+          let paddingX = 31;
+          let paddingY = (this.panelHeigth/this.panelWidth) * paddingX;
+          // let sizeX = 32;
+          let sizeX = 42;
+          let sizeY = (this.panelHeigth/this.panelWidth) * sizeX;
+          let spaceLeftX = this.panelWidth - (this.steps*sizeX) - (2*paddingX);
+          let spaceBetweenX = spaceLeftX/(this.steps-1);
+          let spaceLeftY = this.panelHeigth - (this.yLevels*sizeY) - (2*paddingY);
+          let spaceBetweenY = spaceLeftY/(this.yLevels-1);
+
+          for(var y=0; y<this.yLevels; y++) {
+              for (var x=0; x<this.steps; x++) {
+                  let button = this.buttonsByX[x][y];
+                  button.setProperties(
+                      this.border+paddingX+(x*(sizeX+spaceBetweenX)),
+                      this.border+paddingY+(y*(sizeY+spaceBetweenY)),
+                      sizeX, sizeY
+                  );
+                  button.draw();
+                  this.mainPanel.addChild(button);          
+              }
+          }
+          
+      }
+
+      noteUp() {
+          if(this.father.note<8)
+            this.father.note++;
+          this.father.buildFrequencies();
+          this.father.drawControlPanel();
+      }
+
+      noteDown() {
+          if(this.father.note>1)
+            this.father.note--;
+          this.father.buildFrequencies();
+          this.father.drawControlPanel();
+      }
+
+      soundUp() {
+          if(this.father.soundNumber<this.father.sounds.length-1)
+            this.father.soundNumber++;
+          this.father.drawControlPanel();
+      }
+
+      soundDown() {
+          if(this.father.soundNumber>0)
+            this.father.soundNumber--;
+          this.father.drawControlPanel();
+      }
+
+      buildFrequencies() {
+          this.frequencies = Array();
+          let minFreq = this.cFrequencies[this.note];
+          let maxFreq = minFreq*2;
+          for(var i=0; i<8; i++) {
+              var frequency = minFreq + ((maxFreq - minFreq) / 8) * (7 - i);
+              this.frequencies.push(frequency);
+          }
+      }
+
+      unblinkStep(step) {
+           for(var y=0; y<this.yLevels; y++) {
+               this.buttonsByX[step][y].unblink();
+           }
+      }
+
+      blinkStep(step) {
+           // for(var y=0; y<this.yLevels; y++) {
+           //     if( this.buttonsByX[step][y].level == 0){
+           //         this.buttonsByX[step][y].blink();
+           //     }
+           // }
+           for(var y=0; y<this.yLevels; y++) {
+               if( this.buttonsByX[step][y].level > 0){
+                   this.buttonsByX[step][y].blink();
+               }
+           }
+      }
+
+      scheduleSoundsAtStep(timeToSound, step){
+          for(var y=0; y<this.yLevels; y++) {
+              let button = this.buttonsByX[step][y];
+              if (button.level > 0) {
+                  this.shootSound(
+                      this.frequencies[y],
+                      this.sounds[this.soundNumber],
+                      timeToSound,
+                      button.volumes[button.level]
+                  );
+              }
+          }
+      }
+
+      shootSound(frequency, soundConfig, waitTime=0, volume=1) {
+            if("volumeDiff" in soundConfig){
+                volume += volume*soundConfig.volumeDiff
+            }
+            soundEffect(
+              frequency,                 //frequency
+              soundConfig.attack,        //attack
+              soundConfig.decay,         //decay
+              soundConfig.waveform,      //waveform
+              volume,                    //Volume
+              0,                         //pan
+              waitTime,                  //wait before playing
+              soundConfig.pitchBend,      //pitch bend amount
+              false,                    //reverse bend
+              0,                        //random pitch range
+              soundConfig.dissonance,    //dissonance
+              soundConfig.delay,        //echo: [delay, feedback, filter]
+              undefined                 //reverb: [duration, decay, reverse?]
+            );
+      }
+    }
+
+    class BlipTronicController extends PIXI.Container {
+        constructor(bpm, initialBlips, wavesContainer) {
+            super();
+            if(initialBlips === undefined) initialBlips = [];
+
+            this.wavesContainer = wavesContainer;
+
+            this.bpm = bpm;
+            this.fps = 3600/this.bpm/4;
+            this.minTempo = 60;
+            this.maxTempo = 140;
+            this.tempoJump = 10;
+
+            this.maxXGrid = 0;
+            this.maxYGrid = 0;
+
+            this.xGridLimit = 4;
+            this.yGridLimit = 4;
+
+            this.largeSize = 500;
+            this.smallSize = 200;
+
+            this.ySizes = Array();
+            for(var y=0; y<this.yGridLimit; y++){
+                this.ySizes.push(true);
+            }
+
+            this.blips = Array();
+            for(var x=0; x<this.xGridLimit; x++) {
+                let blipsY = Array();
+                for(var y=0; y<this.yGridLimit; y++){
+                    blipsY.push(undefined);
+                }
+                this.blips.push(blipsY);
+            }
+
+            for(var i=0; i<initialBlips.length; i++){
+                this.buildBlipTronic(initialBlips[i][0], initialBlips[i][1]);
+            }
+            this.moved = 0;
+            this.step = 0;
+        }
+
+        getYForYIndex(yGrid) {
+            let currentSize = 0;
+            for(var y=0; y<yGrid; y++){
+                if(this.ySizes[y])
+                    currentSize += this.largeSize + 174;
+                else
+                    currentSize += this.smallSize + 174;
+            }
+            return currentSize;
+        }
+
+        getYSizeFor(yGrid) {
+            let size = this.ySizes[yGrid] ? this.largeSize : this.smallSize;
+            return size;
+        }
+
+        getMaxXGrid() {
+            let maxX = 0;
+            for(var x=0; x<this.xGridLimit; x++) {
+                for(var y=0; y<this.yGridLimit; y++){
+                    if(this.blips[x][y]){
+                        maxX = Math.max(maxX, x);
+                    }
+                }
+            }
+            return maxX;
+        }
+
+        getMaxYGrid() {
+            let maxY = 0;
+            for(var x=0; x<this.xGridLimit; x++) {
+                for(var y=0; y<this.yGridLimit; y++){
+                    if(this.blips[x][y]){
+                        maxY = Math.max(maxY, y);
+                    }
+                }
+            }
+            return maxY;
+        }
+
+        buildBlipTronic(xGrid, yGrid, note=4, soundNumber=0) {
+            if(!this.blips[xGrid][yGrid]){
+                let newBlip = new BlipTronic(
+                    xGrid*550, this.getYForYIndex(yGrid),
+                    500, this.getYSizeFor(yGrid), 5, xGrid, yGrid,
+                    this.xGridLimit, note, soundNumber,
+                    this.tempoUp, this.tempoDown,
+                    this.buildRight, this.buildDown,
+                    this.removeChildAt, this.toggleSize, this
+                );
+                this.addChild(newBlip);
+                this.blips[xGrid][yGrid] = newBlip;
+
+                addWave(this.wavesContainer, newBlip.baseColor);
+                this.reInit();
+            }
+        }
+
+        removeChildAt() {
+            let controller = this.father.father;
+            let xGrid = this.father.xIndex;
+            let yGrid = this.father.yIndex;
+            controller.removeChild(controller.blips[xGrid][yGrid]);
+            controller.blips[xGrid][yGrid] = undefined;
+            controller.reInit();
+        }
+
+        buildRight() {
+            this.father.father.buildBlipTronic(
+                this.father.xIndex + 1, this.father.yIndex,
+                this.father.note, this.father.soundNumber
+            );
+        }
+
+        buildDown() {
+            this.father.father.buildBlipTronic(
+                this.father.xIndex, this.father.yIndex + 1,
+                this.father.note, this.father.soundNumber
+            );
+        }
+
+        toggleY(yIndex) {
+            // Toggle the size of this row
+            this.ySizes[yIndex] = !this.ySizes[yIndex];
+
+            for(var x=0; x<this.xGridLimit; x++){
+                if(this.blips[x][yIndex]){
+                    this.blips[x][yIndex].panelHeigth = this.getYSizeFor(yIndex);
+                    this.blips[x][yIndex].draw();
+                }
+            }
+
+            // Move the rest of the blips
+            for(var y=yIndex+1; y<this.yGridLimit; y++){
+                for(var x=0; x<this.xGridLimit; x++){
+                    if(this.blips[x][y]){
+                        this.blips[x][y].y = this.getYForYIndex(y)
+                    }
+                }
+            }
+        }
+
+        tempoUp () {
+            let controller = this.father.father;
+          if(controller.bpm<controller.maxTempo) {
+              controller.bpm += controller.tempoJump;
+              controller.fps = 3600/controller.bpm/4;
+              controller.reInit();
+          }
+        }
+
+        tempoDown() {
+            let controller = this.father.father;
+            if(controller.bpm>controller.minTempo) {
+                controller.bpm -= controller.tempoJump;
+                controller.fps = 3600/controller.bpm/4;
+                controller.reInit();
+            }
+        }
+
+        toggleSize() {
+            let controller = this.father.father;
+            controller.toggleY(this.father.yIndex);
+        }
+
+        reInit() {
+            this.maxXGrid = this.getMaxXGrid();
+            this.maxYGrid = this.getMaxYGrid();
+            this.children.forEach(function(b) {
+                b.moved = 0;
+                b.step = 0;
+                b.drawControlPanel();
+            });
+            this.totalSteps = (this.maxXGrid+1)*8;
+        }
+
+        getXIndexOfStep(step) {
+            return Math.floor(step/8)
+        }
+
+        loop(delta) {
+          this.moved += delta;
+          if(this.moved >= this.fps){
+              // console.log("passed step " + this.moved);
+              this.moved = this.moved-this.fps;
+              // console.log("after adjustment " + this.moved);
+              this.step++;
+              this.step = this.step%this.totalSteps;
+
+              let previousStep = (this.step+(this.totalSteps-1))%this.totalSteps;
+              let thisStep = this.step;
+              let nextStep = (this.step+1)%this.totalSteps;
+
+              let xIndexPreviousStep = this.getXIndexOfStep(previousStep);
+              let xIndexThis = this.getXIndexOfStep(thisStep);
+              let xIndexNextStep = this.getXIndexOfStep(nextStep);
+
+              previousStep %= 8;
+              thisStep %= 8;
+              nextStep %= 8;
+
+              let timeToPlay = (60/(this.bpm*4))-(this.moved/60);
+            let startTime = new Date();
+              for(var yIndex=0; yIndex<=this.maxYGrid; yIndex++) {
+                  if (this.blips[xIndexNextStep][yIndex]) {
+                      this.blips[xIndexNextStep][yIndex].scheduleSoundsAtStep(
+                          timeToPlay, nextStep
+                      )
+                  }
+              }
+            totalTime += (new Date() - startTime);
+              for(var yIndex=0; yIndex<=this.maxYGrid; yIndex++){
+                  if(this.blips[xIndexPreviousStep][yIndex]) {
+                      this.blips[xIndexPreviousStep][yIndex].unblinkStep(previousStep);
+                  }
+                  if(this.blips[xIndexThis][yIndex]) {
+                      this.blips[xIndexThis][yIndex].blinkStep(thisStep);
+                  }
+              }
+          }
+        }
+    }
+
+    let type = "WebGL";
+    if(!PIXI.utils.isWebGLSupported()){
+      type = "canvas"
+    }
+
+    //Create a Pixi Application
+    let app = new PIXI.Application({width: (500+150)*4, height: (500+250)*4, antialias: true});
+
+    app.renderer.margin = 0;
+    app.renderer.padding = 0;
+    app.renderer.view.style.position = "absolute";
+    app.renderer.view.style.display = "block";
+    app.renderer.backgroundColor = 0xFFFFFF;
+    app.renderer.autoResize = true;
+    // app.renderer.resize(window.innerWidth, window.innerHeight);
+
+
+    var wavesContainer = new PIXI.Container();
+    let blipController = new BlipTronicController(100, [[0,0]], wavesContainer);
+    blipController.x = 50;
+    blipController.y = 50;
+    var initColor = blipController.blips[0][0].baseColor;
+
+    function contrastColor(color)
+    {
+      var d = 0;
+
+      // Counting the perceptive luminance - human eye favors green color...      
+      var luminance = (0.299 * color[0] + 0.587 * color[1] + 0.114 * color[2]);
+
+      if (luminance > 0.5)
+         d = 0; // bright colors - black font
+      else
+         d = 1; // dark colors - white font
+                  
+      return [d, d, d];
+    }
+
+    function addWave(wavesContainer, initColor, smooth=-0.20){
+      // for(var i=0; i<randomInt(2, 3); i++){
+      var vertical = randomBool();
+      if(vertical){
+          var length = window.innerHeight;
+          var maxPoint = window.innerWidth;
+      } else {
+          var length = window.innerWidth;
+          var maxPoint = window.innerHeight;
+      }
+      var pad = 16;
+      var initialColor = [
+        initColor[0]+smooth, 
+        initColor[1]+smooth, 
+        initColor[2]+smooth, 
+      ]
+      // constructor(centerPoint, initialColor, length, barWidth=10, barHeight=50,
+      //       amplitude=100, speed=10, frequency=0.5, vertical=true) {
+      wavesContainer.addChild(
+          new Wave(randomInt(pad, maxPoint-pad), initialColor, length, 66, randomInt(66, 211),
+          randomInt(20, 80), randomInt(1, 5), Math.random()/6,
+          vertical)
+      )
+    }
+
+    // addWave(wavesContainer, initColor);
+
+    // }
+    app.stage.addChild(wavesContainer);
+    
+    app.stage.addChild(blipController);
+    document.body.appendChild(app.view);
+
+    // Listen for animate update
+    app.ticker.add((delta) => {
+        blipController.loop(delta);
+        wavesContainer.x = window.pageXOffset;
+        wavesContainer.y = window.pageYOffset;
+        wavesContainer.children.forEach(function (wave) {
+          wave.move(delta);
+        })
+    });
+
+  </script>
+</body>
+</html>
