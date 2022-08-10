@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<title>My first three.js app</title>
+		<style>
+			body { margin: 0; }
+		</style>
+	</head>
+	<body>
+		<script src="three.js"></script>
+		<script>
+		const scene = new THREE.Scene();
+		const camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 0.1, 1000 );
+
+		const renderer = new THREE.WebGLRenderer();
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		document.body.appendChild( renderer.domElement );
+
+		const geometry = new THREE.BoxGeometry( 1, 2, 1 );
+		const material = new THREE.MeshBasicMaterial( { color: 0x00ff00,
+		 											    wireframe: true,} );
+		const cube = new THREE.Mesh( geometry, material );
+		scene.add( cube );
+
+		const material2 = new THREE.LineBasicMaterial( { color: 0x0000ff } );
+		const points = [];
+		points.push( new THREE.Vector3( - 10, 0, 0 ) );
+		points.push( new THREE.Vector3( 0, 10, 0 ) );
+		points.push( new THREE.Vector3( 10, 0, 0 ) );
+		points.push( new THREE.Vector3( 0, -10, 0 ) );
+		points.push( new THREE.Vector3( - 10, 0, 0 ) );
+		points.push( new THREE.Vector3( 10, 0, 0 ) );
+		const geometry2 = new THREE.BufferGeometry().setFromPoints( points );
+		const line = new THREE.Line( geometry2, material2 );
+
+		scene.add( line );
+
+
+		const material3 = new THREE.LineBasicMaterial( { color: 0x0000ff } );
+		const points2 = [];
+		points2.push( new THREE.Vector3( 5, 0, -10 ) );
+		points2.push( new THREE.Vector3( 0, 10, 0 ) );
+		points2.push( new THREE.Vector3( -5, 0, 10 ) );
+		points2.push( new THREE.Vector3( 0, -10, 0 ) );
+		points2.push( new THREE.Vector3( 5, 0, -10 ) );
+		points2.push( new THREE.Vector3( -5, 0, 10 ) );
+		const geometry3 = new THREE.BufferGeometry().setFromPoints( points2 );
+		const line2 = new THREE.Line( geometry3, material3 );
+
+		scene.add( line2 );
+
+
+		// const material3 = new THREE.LineBasicMaterial( { color: 0x0000ff } );
+		const points3 = [];
+		points3.push( new THREE.Vector3( -5, 0, -10 ) );
+		points3.push( new THREE.Vector3( 0, 10, 0 ) );
+		points3.push( new THREE.Vector3( 5, 0, 10 ) );
+		points3.push( new THREE.Vector3( 0, -10, 0 ) );
+		points3.push( new THREE.Vector3( -5, 0, -10 ) );
+		points3.push( new THREE.Vector3( 5, 0, 10 ) );
+		const geometry4 = new THREE.BufferGeometry().setFromPoints( points3 );
+		const line3 = new THREE.Line( geometry4, material3 );
+
+		scene.add( line3 );
+
+		// camera.position.z = 5;
+
+		const cameraZMax = 44;
+		const cameraZMin = 10;
+		camera.position.set( 0, 7, cameraZMax);
+		camera.lookAt( 0, 0, 0 );
+
+		var delta = 0.44;
+
+		const coneGeo = new THREE.ConeGeometry( 2, 7, 10 );
+		const coneMat = new THREE.MeshBasicMaterial( {color: 0xffff00,
+		 											  wireframe: true} );
+		const cone = new THREE.Mesh( coneGeo, coneMat );
+		cone.position.set(0, 5, 0);
+		scene.add( cone );
+
+		const coneGeo2 = new THREE.ConeGeometry( 2, -7, 10 );
+		const coneMat2 = new THREE.MeshBasicMaterial( {color: 0xffff00,
+		 											  wireframe: true} );
+		const cone2 = new THREE.Mesh( coneGeo2, coneMat2 );
+		cone2.position.set(0, -5, 0);
+		scene.add( cone2 );
+
+		function animate() {
+			requestAnimationFrame( animate );
+
+			cube.rotation.x += 0.01;
+			cube.rotation.y += 0.01;
+
+
+			const time = - performance.now() * 0.0001;
+
+			camera.position.x = 10 * Math.cos( time );
+			camera.position.y = 10 * Math.sin( time );
+
+			camera.position.z -= delta;
+			camera.lookAt( 0, 0, 0 );
+
+			if(
+				Math.abs(camera.position.z) >= cameraZMax
+			){
+				delta *= -1;
+			}
+
+			if(
+				Math.abs(camera.position.z) <= 7
+			){
+				camera.lookAt( 0, 0, 0 );
+			}			
+
+
+			renderer.render( scene, camera );
+		}
+		animate();
+		</script>
+	</body>
+</html>
